@@ -681,8 +681,14 @@ def add_member(client_session, esg_name, pool_name, member_name, member_ip, port
         pool_details['member'] = []
         members = []
 
-    new_member = {'name': member_name, 'ipAddress': member_ip, 'port': port, 'monitorPort': monitor_port,
+    new_member = {'name': member_name, 'ipAddress': member_ip,
                   'weight': weight, 'maxConn': max_conn, 'minConn': min_conn}
+    if port != None:
+            new_member['port'] = port
+
+    if monitor_port != None:
+            new_member['monitorPort'] = monitor_port
+
 
     members.append(new_member)
     pool_details['member'] = members
