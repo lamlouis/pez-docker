@@ -1,14 +1,14 @@
-
 import argparse
 import ConfigParser
 import json
+import xml.etree.ElementTree as ET
 from libutils import get_logical_switch, get_vdsportgroupid, connect_to_vc, check_for_parameters
 from libutils import get_datacentermoid, get_edgeresourcepoolmoid, get_edge, get_datastoremoid, get_networkid
 from tabulate import tabulate
 from nsxramlclient.client import NsxClient
 from argparse import RawTextHelpFormatter
 from pkg_resources import resource_filename
-
+import pprint
 
 def add_nat_rule(client_session, esg_name, nat_type, nat_vnic, original_ip, translated_ip, original_port, translated_port, protocol, description):
     """
@@ -67,6 +67,90 @@ def _add_nat_rule(client_session, **kwargs):
     else:
         print '{} Rule creation failed on edge {} for {} -> {}'.format(kwargs['nat_type'].upper(), kwargs['esg_name'], kwargs['original_ip'], kwargs['translated_ip'])
 
+def get_nat_rules_with_ip(client_session, esg_name, original_ip, translated_ip):
+    """
+    This function returns all NAT rules on an esg with the specified original and translated IPs
+    :type client_session: nsxramlclient.client.NsxClient
+    :param client_session: A nsxramlclient session Object
+    :type esg_name: str
+    :param esg_name: The display name of a Edge Service Gateway used for Load Balancing
+    :type original_ip: str
+    :param esg_name: The original IP in the NAT rule
+    :type translated_ip: str
+    :param esg_name: The translated IP in the NAT rule
+    """
+    esg_id, esg_params = get_edge(client_session, esg_name)
+    if not esg_id:
+        return None
+
+    result = client_session.read('edgeNat', uri_parameters={'edgeId': esg_id})
+
+    if result['status'] != 200:
+        return None
+    else:
+        rules = []
+        nats = result['body']['nat']['natRules']['natRule']
+
+        for i in nats:
+            if original_ip in i['originalAddress'] and translated_ip in i['translatedAddress'] and i['ruleType'] == 'user':
+                rules.append(i['ruleId'])
+
+        # returns a list of ruleIDs
+        return rules
+
+def _get_nat_rules_with_ip(client_session, **kwargs):
+    needed_params = ['esg_name', 'original_ip','translated_ip']
+    if not check_for_parameters(needed_params, kwargs):
+        return None
+
+    result = get_nat_rules_with_ip(client_session, kwargs['esg_name'], kwargs['original_ip'], kwargs['translated_ip'])
+
+    if result and kwargs['verbose']:
+        print result
+    elif result:
+        for i in result:
+            print i
+    else:
+        print 'Failed to get NAT rules for {} on {}'.format(kwargs['translated_ip'], kwargs['esg_name'])
+
+
+def delete_nat_rule(client_session, esg_name, rule_id):
+    """
+    This function deletes the NAT rule with ID rule_id
+
+    :type client_session: nsxramlclient.client.NsxClient
+    :param client_session: A nsxramlclient session Object
+    :type esg_name: str
+    :param esg_name: The display name of a Edge Service Gateway
+    :param rule_id: The ID of the NAT rules
+    """
+    esg_id, esg_params = get_edge(client_session, esg_name)
+    if not esg_id:
+        return None
+
+    result = client_session.delete('edgeNatRule', uri_parameters={'edgeId': esg_id, 'ruleID':rule_id})
+    if result['status'] != 204:
+        return None
+    else:
+        return result
+
+def _delete_nat_rule(client_session, **kwargs):
+    needed_params = ['esg_name', 'rule_id']
+    if not check_for_parameters(needed_params, kwargs):
+        return None
+
+    result = delete_nat_rule(client_session, kwargs['esg_name'], kwargs['rule_id'])
+
+    if result and kwargs['verbose']:
+        print result
+    elif result:
+        print 'NAT rule {} on edge {} deleted'.format(kwargs['rule_id'], kwargs['esg_name'])
+    else:
+        print 'Failed to delete NAT rule {} on {}'.format(kwargs['rule_id'], kwargs['esg_name'])
+
+
+
+
 def contruct_parser(subparsers):
     parser = subparsers.add_parser('nat', description="Functions for NAT",
                                    help="Functions for NAT",
@@ -74,6 +158,8 @@ def contruct_parser(subparsers):
 
     parser.add_argument("command", help="""
     add_nat: create a new NAT Rule
+    delete_nat: delete a NAT using the rule ID
+    get_nat_rules_tip: get all NAT rules with translated IP
     """)
 
     parser.add_argument("-n",
@@ -100,10 +186,12 @@ def contruct_parser(subparsers):
     parser.add_argument("-p",
                         "--protocol",
                         help="protocol")
+    parser.add_argument("-r",
+                        "--rule_id",
+                        help="rule ID of a NAT")
     parser.add_argument("-d",
                         "--description",
                         help="description")
-
 
     parser.set_defaults(func=_nat_main)
 
@@ -129,6 +217,8 @@ def _nat_main(args):
     try:
         command_selector = {
             'add_nat': _add_nat_rule,
+            'get_nat_rules_tip': _get_nat_rules_with_ip,
+            'delete_nat': _delete_nat_rule,
             }
         command_selector[args.command](client_session, esg_name=args.esg_name,
                                         original_ip=args.original_ip,
@@ -140,10 +230,10 @@ def _nat_main(args):
                                         nat_vnic=args.nat_vnic,
                                         protocol=args.protocol,
                                         description=args.description,
+                                        rule_id=args.rule_id,
                                        )
     except KeyError:
         print('Unknown command')
-
 
 def main():
     main_parser = argparse.ArgumentParser()
@@ -151,7 +241,6 @@ def main():
     contruct_parser(subparsers)
     args = main_parser.parse_args()
     args.func(args)
-
 
 if __name__ == "__main__":
     main()
