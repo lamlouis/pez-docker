@@ -63,20 +63,18 @@ def GetVMHosts(content):
     host_view.Destroy()
     return obj
 
-
 def UpdateHostsSwitch(content, hosts, vswitchName, mtu):
     for host in hosts:
-        UpdateHostSwitch(content, host, vswitchName, mtu)
+        UpdateHostSwitch(host, vswitchName, mtu)
 
 
-def UpdateHostSwitch(content, host, vswitchName, mtu):
-    for host in _get_vim_objects(content, vim.HostSystem):
-      for vswitch in host.config.network.vswitch:
-         if vswitch.name == vswitchName:
+def UpdateHostSwitch(host, vswitchName, mtu):
+    for vswitch in host.config.network.vswitch:
+        if vswitch.name == vswitchName:
             vswitch_spec = vim.host.VirtualSwitch.Specification()
             vswitch_spec = vswitch.spec
             vswitch_spec.mtu = mtu
-    host.configManager.networkSystem.UpdateVirtualSwitch(vswitchName, vswitch_spec)
+        host.configManager.networkSystem.UpdateVirtualSwitch(vswitchName, vswitch_spec)
 
 
 def _get_vim_objects(content, vim_type):
