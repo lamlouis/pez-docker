@@ -203,7 +203,8 @@ def get_certificate(client_session, edge_name, cert_name):
             return all_certs['objectId'], all_certs
     elif type(all_certs) == type(list()):
         try:
-            cert_params = [scope for scope in all_certs if scope['name'] == cert_name][0]
+#            cert_params = [scope for scope in all_certs if scope['name'] == cert_name][0]
+            cert_params = [scope for scope in all_certs if 'name' in scope if scope['name'] == cert_name][0]
             cert_id = cert_params['objectId']
         except IndexError:
             return None, None
